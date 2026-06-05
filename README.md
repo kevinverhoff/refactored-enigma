@@ -95,23 +95,35 @@ One notable signal: C13 pulls together both MEMO and TEMPLATE documents on the s
 
 ---
 
-## What is Next
+## Where This Is Going
 
-**Vector database**
-Chunk the parquet text, embed with a sentence transformer or OpenAI embeddings, and load into a vector store (Chroma or Pinecone). Metadata -- date, author, doc_type, cluster_id -- becomes filterable at retrieval time.
+The pipeline built so far -- collection, extraction, EDA, and clustering -- is the foundation for a fully interactive document intelligence tool. The target capabilities are:
 
-**RAG pipeline**
-Retrieve the top-k most relevant chunks for a query, pass them to an LLM with a grounded prompt. Starting point: question answering over specific memos. Extend to multi-document summarization and trend extraction.
+- **Semantic search** -- find relevant memos by meaning, not just keywords
+- **Document Q&A** -- ask a question, get a grounded answer with citations back to the source memo
+- **Summarization** -- get a concise summary of any document or group of related documents
+- **Insight generation** -- surface trends, changes over time, and notable patterns across the corpus ("How has guidance on TIF districts changed since 2022?")
 
-**LangGraph system**
-A multi-node graph that routes queries to the right tool -- semantic search, document Q&A, summarization, or trend analysis -- based on query intent. Nodes can call each other, enabling complex chains like "find all 2024 memos about excess levy appeals, then summarize the key changes."
+These will be built out in the next phases of the project.
 
-**UI**
-A lightweight web interface on top of the LangGraph agent. Target capabilities:
-- Natural language search over the full corpus
-- Ask a question, get an answer with source citations
-- Summarize a document or a cluster of related documents
-- "What changed between 2022 and 2026 on topic X?" trend queries
+**Vector database** *(next)*
+Chunk the parquet text, embed with a sentence transformer or OpenAI embeddings, and load into a vector store (Chroma or Pinecone). Metadata -- date, author, doc_type, cluster_id -- becomes filterable at query time, so retrieval can be scoped by year, topic, or document type.
+
+**RAG pipeline** *(next)*
+Retrieve the top-k most relevant chunks for a query and pass them to an LLM with a grounded prompt. RAG is the core mechanism behind both semantic search (surface relevant documents) and document Q&A (answer questions with citations). Cluster assignments from the topic model can pre-filter the retrieval space before vector search runs.
+
+**LLM integration** *(next)*
+Wire the RAG pipeline to an LLM (Claude or GPT-4o) for synthesis tasks that go beyond retrieval -- summarization of multi-document clusters, trend analysis across years, and open-ended insight generation. The LLM turns retrieved chunks into answers, summaries, and narratives.
+
+**LangGraph agent** *(next)*
+A multi-node graph that routes each query to the right tool -- semantic search, Q&A, summarization, or trend analysis -- based on query intent. Nodes can chain: "find all 2024 memos about excess levy appeals, then summarize what changed" is a two-node traversal. The agent handles follow-up questions and multi-step reasoning naturally.
+
+**UI** *(next)*
+A lightweight web interface over the LangGraph agent. The interface will support:
+- Free-text search with ranked results
+- Question answering with inline source citations
+- On-demand summarization of any document or cluster
+- Trend and comparison queries across years or topics
 
 ---
 
