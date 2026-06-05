@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated / large files -- recreate locally by running the pipeline scripts
+chroma_db/
+docs/
+metadata.json
+documents.parquet
+eda/*.html
