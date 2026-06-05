@@ -139,6 +139,9 @@ def compute_top_tfidf(df: pd.DataFrame, n_terms: int = 30) -> dict[str, list[tup
         ngram_range=(1, 2),
         min_df=2,
         sublinear_tf=True,
+        # Only match tokens that start with a letter — drops pure numbers (317, 18000)
+        # and underscore strings (___...) that appear in scanned form templates.
+        token_pattern=r"(?u)\b[a-zA-Z][a-zA-Z0-9]+\b",
     )
     matrix = vec.fit_transform(usable["text"])
     terms = vec.get_feature_names_out()
