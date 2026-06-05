@@ -205,6 +205,76 @@ Requires Python 3.10+. PNG export requires `kaleido`; HTML files are always writ
 
 ---
 
+## Using This Pipeline With Your Own Documents
+
+The pipeline is general enough to adapt to any corpus of PDFs, Word documents, or Excel files. Here is what to think through before you start.
+
+### 1. Getting your documents
+
+**Option A -- write a scraper.** If your documents live on a public website, `get_docs.py` is a reasonable template. The key pieces to adapt: the page URLs, the CSS/HTML structure of the document links, and whatever filename parsing makes sense for your naming conventions. The metadata fields that matter downstream are described in the next section.
+
+**Option B -- bring your own files.** Place documents under `docs/` in whatever folder structure makes sense, then write a script that produces a `metadata.json` matching the schema below. You do not need a scraper if the files are already on disk.
+
+### 2. Metadata schema
+
+`metadata.json` is a list of objects. The fields used by downstream scripts are:
+
+| Field | Required by | Notes |
+|---|---|---|
+| `url` | `build_vectorstore.py`, `test_chroma.py` | Unique identifier for each document. Use a file URI if there is no web URL. |
+| `local_path` | `ingest.py` | Path to the file relative to `docs/` |
+| `file_type` | `ingest.py` | `pdf`, `docx`, `doc`, `xlsx`, `xls` |
+| `downloaded` | `ingest.py` | `true` to include the file in extraction |
+| `doc_type` | `build_vectorstore.py` | Semantic type label (e.g. `MEMO`, `REPORT`, `TEMPLATE`). Used as a filterable metadata field in Chroma. |
+| `source_year` | `build_vectorstore.py` | Integer year. Enables year-scoped queries. |
+| `memo_date` | `build_vectorstore.py` | ISO date string (`YYYY-MM-DD`) or empty string |
+| `author` | `build_vectorstore.py` | Author name or empty string |
+| `title` | `build_vectorstore.py` | Document title or empty string |
+
+All other fields (`cluster_id`, `cluster_label`) are added automatically by `document_clustering.py`.
+
+### 3. Text extraction
+
+`ingest.py` handles PDF, DOCX, and XLSX out of the box. A few things to check for your corpus:
+
+- **Scanned PDFs** -- `pdfplumber` extracts text layer only. If your PDFs are image-based scans, extraction will return empty strings. You will need OCR (e.g. `pytesseract`, AWS Textract, or Azure Document Intelligence) as a pre-processing step before running `ingest.py`.
+- **Other file types** -- add an extractor function and register it in the `EXTRACTORS` dict in `ingest.py`. HTML, plain text, and Markdown are straightforward additions.
+- **Short documents** -- the 500-character threshold in `explore.py` flags documents that likely extracted poorly. Tune this to your corpus.
+
+### 4. Things to tune per corpus
+
+**Chunk size** (`build_vectorstore.py` -- `CHUNK_SIZE`, `CHUNK_OVERLAP`)
+The default is 1,000 characters with 150-character overlap. Shorter documents benefit from smaller chunks; long dense reports may do better at 1,500-2,000. Chunk size directly affects retrieval precision -- too large and a chunk contains multiple topics; too small and it lacks context.
+
+**Clustering parameters** (`document_clustering.py` -- `HDBSCAN_MIN_CLUSTER_SIZE`, `HDBSCAN_MIN_SAMPLES`)
+These were tuned for ~475 documents. Larger corpora can tolerate higher `min_cluster_size` (less noise); smaller corpora may need it lower. Start with `min_cluster_size` at roughly 1-2% of your document count.
+
+**TF-IDF stop words and token pattern** (`explore.py`, `document_clustering.py`)
+The custom token pattern strips numbers and underscores -- artifacts specific to scanned form templates in this corpus. Adjust the pattern and add domain-specific stop words if your corpus has its own noise patterns.
+
+**Chroma collection name** (`build_vectorstore.py` -- `COLLECTION_NAME`)
+Change `dlgf_memos` to something meaningful for your corpus.
+
+### 5. API key
+
+Create a `.env` file in the project root:
+
+```
+GEMINI_API_KEY=your_key_here
+```
+
+The Gemini free tier is sufficient for corpora up to a few thousand documents. For larger corpora or production use, enable billing -- embedding costs are roughly $0.000025 per 1,000 characters. You can also swap to a different embedding model by changing `EMBED_MODEL` in `build_vectorstore.py`; the rest of the pipeline is model-agnostic.
+
+### 6. Scale
+
+| Corpus size | Notes |
+|---|---|
+| < 1,000 docs | Works as-is. Run time for embedding is under an hour on the free tier. |
+| 1,000 -- 10,000 docs | Increase `EMBED_DELAY` in `build_vectorstore.py` to avoid rate limits. Chroma handles this scale locally without issue. |
+| > 10,000 docs | Consider a hosted vector store (Qdrant Cloud, Pinecone) and a paid embedding API. Local Chroma can still work but queries slow down at very high chunk counts. |
+
+---
+
 ## Project Structure
 
 ```
