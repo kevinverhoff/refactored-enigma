@@ -23,7 +23,7 @@ The end goal is a LangGraph-powered assistant with a web UI that can answer ques
 | 2. Extract text | `ingest.py` | `documents.parquet` |
 | 3. Explore | `explore.py` | `eda/` (charts + flagged docs) |
 | 4. Topic modeling | `document_clustering.py` | cluster columns in parquet + `cluster_summary.csv` |
-| 5. Index | *next* | vector database |
+| 5. Build vector store | `build_vectorstore.py` | `chroma_db/` (Chroma collection) |
 | 6. Query | *next* | RAG + LangGraph + UI |
 
 ### `get_docs.py`
@@ -42,6 +42,9 @@ Exploratory analysis of the parquet. Produces four outputs in `eda/`, each saved
 
 ### `document_clustering.py`
 Clusters documents by topic using TF-IDF + SVD embeddings and HDBSCAN. No need to specify the number of clusters -- HDBSCAN finds natural density-based groupings, leaving genuinely ambiguous documents unassigned rather than forcing them into a cluster. Reduces to 2D with UMAP for visualization. Adds `cluster_id` and `cluster_label` to both `documents.parquet` and `metadata.json`, and writes `cluster_summary.csv` with per-cluster doc counts, type breakdowns, top terms, and date ranges.
+
+### `build_vectorstore.py`
+Chunks each document, embeds with Gemini `gemini-embedding-001` (`task_type=RETRIEVAL_DOCUMENT`), and loads into a persistent Chroma collection named `dlgf_memos`. Each chunk is stored with filterable metadata: `doc_type`, `source_year`, `memo_date`, `author`, `cluster_id`, and `cluster_label`. Re-running is safe -- already-indexed chunks are skipped. The result is 13,589 chunks across 475 documents ready for semantic retrieval.
 
 ---
 
@@ -95,6 +98,59 @@ One notable signal: C13 pulls together both MEMO and TEMPLATE documents on the s
 
 ---
 
+## Semantic Search
+
+The vector store is live. Queries are embedded with `task_type=RETRIEVAL_QUERY` and matched against the indexed chunks using cosine similarity. Results are scored 0-1 (higher = more similar). Metadata filters can scope any query by year, author, doc type, or topic cluster.
+
+A few examples from `test_chroma.py`:
+
+**Plain semantic search** -- no keywords required, meaning drives retrieval
+
+```
+Query: "homestead deduction eligibility requirements"
+
+score  memo_date    author   doc_type  title
+0.765  2024-06-18  Shackle   MEMO      Legislation Affecting Deductions and Exemptions
+0.750  2026-05-27  Cockerill MEMO      Legislation Affecting Deductions, Credits, and Exemptions
+0.737  2025-09-18  Cockerill MEMO      County Option Homestead Property Tax Deferral Program
+```
+
+**Filtered by year** -- scope to recent guidance only
+
+```
+Query: "property tax assessment methodology"  [source_year >= 2024]
+
+score  memo_date    author            doc_type  title
+0.719  2025-01-03  Wood              MEMO      Ratio Study Guidance
+0.713  2025-05-09  Cockerill         MEMO      2025 Revised Ag. Base Rate Certification Letter
+0.711  2026-01-02  Cockerill         MEMO      2026 Agricultural Land Base Rate Packet
+```
+
+**Filtered by doc type** -- find templates, not memos
+
+```
+Query: "excess levy appeal petition filing"  [doc_type = TEMPLATE]
+
+score  memo_date    author                            doc_type  title
+0.793  2022-08-25  Excess Levy Appeal Shortfall      TEMPLATE  and Petition
+0.787  2022-08-25  Excess Levy Appeal Correction     TEMPLATE  and Petition
+0.770  2022-08-25  Excess Levy Appeal Emergency      TEMPLATE  and Petition
+```
+
+**Filtered by author** -- everything from a specific DLGF staffer
+
+```
+Query: "school bus replacement capital planning"  [author = Van Dorp]
+
+score  memo_date    author    doc_type  title
+0.758  2023-06-30  Van Dorp  MEMO      Bus Replacement Plan Templates
+0.758  2022-07-13  Van Dorp  MEMO      Bus Replacement Plan and Capital Projects Plan
+```
+
+Full document retrieval is also supported -- `get_document(url)` reassembles all chunks for a given source URL back into the original text, ready to pass to an LLM for summarization or Q&A.
+
+---
+
 ## Where This Is Going
 
 The pipeline built so far -- collection, extraction, EDA, and clustering -- is the foundation for a fully interactive document intelligence tool. The target capabilities are:
@@ -105,9 +161,6 @@ The pipeline built so far -- collection, extraction, EDA, and clustering -- is t
 - **Insight generation** -- surface trends, changes over time, and notable patterns across the corpus ("How has guidance on TIF districts changed since 2022?")
 
 These will be built out in the next phases of the project.
-
-**Vector database** *(next)*
-Chunk the parquet text, embed with a sentence transformer or OpenAI embeddings, and load into a vector store (Chroma or Pinecone). Metadata -- date, author, doc_type, cluster_id -- becomes filterable at query time, so retrieval can be scoped by year, topic, or document type.
 
 **RAG pipeline** *(next)*
 Retrieve the top-k most relevant chunks for a query and pass them to an LLM with a grounded prompt. RAG is the core mechanism behind both semantic search (surface relevant documents) and document Q&A (answer questions with citations). Cluster assignments from the topic model can pre-filter the retrieval space before vector search runs.
@@ -143,6 +196,9 @@ python explore.py
 
 # 4. Cluster by topic (updates parquet + metadata.json, writes cluster_summary.csv and eda/clusters_*.{html,png})
 python document_clustering.py
+
+# 5. Build vector store (chunks, embeds with Gemini, writes chroma_db/)
+python build_vectorstore.py
 ```
 
 Requires Python 3.10+. PNG export requires `kaleido`; HTML files are always written as a fallback. UMAP is used for 2D projection if `umap-learn` is installed; otherwise falls back to PCA.
@@ -157,6 +213,8 @@ Requires Python 3.10+. PNG export requires `kaleido`; HTML files are always writ
 |-- ingest.py                  # Text extraction -> parquet
 |-- explore.py                 # EDA charts and flagging
 |-- document_clustering.py     # Topic modeling and cluster visualization
+|-- build_vectorstore.py       # Chunk, embed, and load into Chroma
+|-- test_chroma.py             # Sample queries against the vector store
 |-- requirements.txt
 |-- metadata.json              # Per-file metadata manifest (includes cluster assignments)
 |-- documents.parquet          # Extracted text corpus (includes cluster assignments)
@@ -167,6 +225,7 @@ Requires Python 3.10+. PNG export requires `kaleido`; HTML files are always writ
 |   |-- 2024/
 |   |-- 2025/
 |   `-- 2026/
+|-- chroma_db/                 # Persistent Chroma vector store (13,589 chunks)
 `-- eda/
     |-- doc_type_distribution.{html,png}
     |-- text_length_by_type.{html,png}
