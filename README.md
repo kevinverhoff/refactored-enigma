@@ -24,7 +24,8 @@ The end goal is a LangGraph-powered assistant with a web UI that can answer ques
 | 3. Explore | `explore.py` | `eda/` (charts + flagged docs) |
 | 4. Topic modeling | `document_clustering.py` | cluster columns in parquet + `cluster_summary.csv` |
 | 5. Build vector store | `build_vectorstore.py` | `chroma_db/` (Chroma collection) |
-| 6. Query | *next* | RAG + LangGraph + UI |
+| 6. RAG pipeline | `rag_pipeline.py` | interactive CLI + importable module |
+| 7. Agent + UI | *next* | LangGraph + web interface |
 
 ### `get_docs.py`
 Scrapes all five year pages, extracts document links, downloads each file, and writes a `metadata.json` manifest. Parses DLGF filename conventions (`YYMMDD-Author-DocType-Title.pdf`) to extract date, author, semantic type, and title. Includes a polite crawl delay and skips files already on disk.
@@ -45,6 +46,9 @@ Clusters documents by topic using TF-IDF + SVD embeddings and HDBSCAN. No need t
 
 ### `build_vectorstore.py`
 Chunks each document, embeds with Gemini `gemini-embedding-001` (`task_type=RETRIEVAL_DOCUMENT`), and loads into a persistent Chroma collection named `dlgf_memos`. Each chunk is stored with filterable metadata: `doc_type`, `source_year`, `memo_date`, `author`, `cluster_id`, and `cluster_label`. Re-running is safe -- already-indexed chunks are skipped. The result is 13,589 chunks across 475 documents ready for semantic retrieval.
+
+### `rag_pipeline.py`
+Takes a natural language query, retrieves the top-k most relevant chunks from Chroma (embedding the query with Gemini `gemini-embedding-001`, `task_type=RETRIEVAL_QUERY`), builds a grounded prompt with numbered source blocks, and calls Gemini `gemini-2.5-flash` to generate a cited answer. Supports metadata filters (`year`, `doc_type`, `author`) and returns a `RAGResponse` dataclass with the answer, full source list, and retrieval stats. Every LLM call site is marked with a `# LLM SWAP` comment -- see the LLM Reference section.
 
 ---
 
@@ -151,22 +155,111 @@ Full document retrieval is also supported -- `get_document(url)` reassembles all
 
 ---
 
+## RAG Pipeline
+
+The RAG pipeline is live. Ask a question in plain English, get a grounded answer with inline citations back to the source memos.
+
+```bash
+python rag_pipeline.py                     # interactive loop
+python rag_pipeline.py --year 2025         # scope every query to 2025+
+python rag_pipeline.py --doc-type MEMO     # memos only
+python rag_pipeline.py --author "Wood"     # one author''s memos only
+python rag_pipeline.py --n 8              # retrieve 8 chunks instead of 6
+```
+
+Answers cite sources inline as `[1]`, `[2]` and list them at the end. The model only uses retrieved chunks -- if the answer isn''t in the corpus, it says so.
+
+### Example: plain Q&A
+
+```
+Q: What are the eligibility requirements for the homestead deduction?
+```
+
+> A "homestead" is defined as property located in Indiana consisting of a dwelling and up to
+> one (1) acre of land immediately surrounding the dwelling [1]. It may include one (1)
+> additional building not part of the dwelling, if predominantly used for residential purposes
+> and not as an investment or rental property [1].
+>
+> For an applicant to claim the deduction:
+> 1. The applicant must own or be buying under contract the real property on the date the
+>    application is filed [2], [6].
+> 2. The real property must be used as their homestead (principal place of residence) [2], [6].
+> 3. The applicant must have resided in Indiana for at least one (1) year before the assessment
+>    date for which the deduction is claimed [2], [6].
+>
+> [1] Legislation Affecting Deductions and Exemptions -- Shackle (2024-06-18)
+> [2] Legislation Affecting Deductions, Credits, and Exemptions -- Cockerill (2026-05-27)
+>
+> *[6 chunks retrieved | gemini-2.5-flash]*
+
+### Example: year filter
+
+```
+Q: What has changed recently with homestead deductions or credits?
+   --year 2025
+```
+
+> Several changes have recently occurred with homestead deductions and credits:
+>
+> - **Homestead Standard Deduction Amount:** The deduction will phase down -- $48,000 for
+>   the 2025 assessment date, $40,000 for 2026, $30,000 for 2027, down to $0 for 2030 and
+>   thereafter [3].
+> - **Supplemental Homestead Credit:** Taxpayers are not required to file an application;
+>   auditors shall identify eligible property and apply the credit automatically [2].
+> - **Deduction for 2% Circuit Breaker Credit Properties:** Added by SEA 1-2025, phasing in
+>   over several years [5].
+>
+> [2] Legislation Affecting Deductions, Exemptions, and Credits -- Cockerill (2025-06-12)
+> [3] Legislation Affecting Deductions, Credits, and Exemptions -- Cockerill (2026-05-27)
+> [5] Legislation Affecting Deductions, Credits, and Exemptions -- Cockerill (2026-05-27)
+
+### Example: grounding -- honest no-answer
+
+The model only answers from retrieved documents. Out-of-corpus questions get a clean refusal rather than a hallucinated answer:
+
+```
+Q: What are the requirements to register to vote in Indiana?
+```
+
+> The provided sources do not contain information about the requirements to register to vote
+> in Indiana.
+
+### Programmatic use
+
+`RAGPipeline` is importable for use in other scripts or the upcoming LangGraph agent:
+
+```python
+from rag_pipeline import RAGPipeline
+
+pipeline = RAGPipeline()
+
+result = pipeline.answer("What is the deadline for Gateway TIF submissions?")
+print(result.answer)      # LLM-generated answer with inline citations
+print(result.sources)     # list of retrieved chunks with metadata + scores
+print(result.n_retrieved) # number of chunks used
+
+# Filtered query
+result = pipeline.answer(
+    "What changed with excess levy appeals?",
+    year=2025,
+    doc_type="MEMO",
+)
+
+# Retrieval only (no LLM call)
+chunks = pipeline.retrieve("agricultural land base rate", n=4)
+
+---
+
 ## Where This Is Going
 
-The pipeline built so far -- collection, extraction, EDA, and clustering -- is the foundation for a fully interactive document intelligence tool. The target capabilities are:
+The pipeline -- collection, extraction, EDA, clustering, vector store, and RAG -- is built. The remaining work is the agent layer and user interface. The target capabilities are:
 
 - **Semantic search** -- find relevant memos by meaning, not just keywords
 - **Document Q&A** -- ask a question, get a grounded answer with citations back to the source memo
 - **Summarization** -- get a concise summary of any document or group of related documents
 - **Insight generation** -- surface trends, changes over time, and notable patterns across the corpus ("How has guidance on TIF districts changed since 2022?")
 
-These will be built out in the next phases of the project.
-
-**RAG pipeline** *(next)*
-Retrieve the top-k most relevant chunks for a query and pass them to an LLM with a grounded prompt. RAG is the core mechanism behind both semantic search (surface relevant documents) and document Q&A (answer questions with citations). Cluster assignments from the topic model can pre-filter the retrieval space before vector search runs.
-
-**LLM integration** *(next)*
-Wire the RAG pipeline to an LLM (Claude or GPT-4o) for synthesis tasks that go beyond retrieval -- summarization of multi-document clusters, trend analysis across years, and open-ended insight generation. The LLM turns retrieved chunks into answers, summaries, and narratives.
+Document Q&A and semantic search are working. Summarization and insight generation are next.
 
 **LangGraph agent** *(next)*
 A multi-node graph that routes each query to the right tool -- semantic search, Q&A, summarization, or trend analysis -- based on query intent. Nodes can chain: "find all 2024 memos about excess levy appeals, then summarize what changed" is a two-node traversal. The agent handles follow-up questions and multi-step reasoning naturally.
@@ -248,7 +341,14 @@ python document_clustering.py
 
 # 5. Build vector store (chunks, embeds with Gemini, writes chroma_db/)
 python build_vectorstore.py
+
+# Run all steps in one go (use --from N to resume from a specific step)
+python run_pipeline.py
 ```
+
+To start the interactive RAG pipeline after the corpus is indexed:
+```bash
+python rag_pipeline.py
 
 Requires Python 3.10+. PNG export requires `kaleido`; HTML files are always written as a fallback. UMAP is used for 2D projection if `umap-learn` is installed; otherwise falls back to PCA.
 
@@ -333,7 +433,10 @@ The Gemini free tier is sufficient for corpora up to a few thousand documents. F
 |-- explore.py                 # EDA charts and flagging
 |-- document_clustering.py     # Topic modeling and cluster visualization
 |-- build_vectorstore.py       # Chunk, embed, and load into Chroma
-|-- test_chroma.py             # Sample queries against the vector store
+|-- rag_pipeline.py            # RAG pipeline: retrieve -> generate -> RAGResponse
+|-- run_pipeline.py            # Run the full pipeline end-to-end (or --from N)
+|-- test_chroma.py             # Low-level Chroma queries (no LLM)
+|-- test_rag.py                # RAG demo -- showcases queries, filters, grounding
 |-- requirements.txt
 |-- metadata.json              # Per-file metadata manifest (includes cluster assignments)
 |-- documents.parquet          # Extracted text corpus (includes cluster assignments)
