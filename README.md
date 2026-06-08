@@ -180,6 +180,55 @@ A lightweight web interface over the LangGraph agent. The interface will support
 
 ---
 
+## LLM Reference
+
+This project uses two Gemini models. Every call site is marked with a `# LLM SWAP` comment in the source. To use a different provider, change the relevant constant and replace the marked code block.
+
+| File | Purpose | Constant | Default model |
+|---|---|---|---|
+| `build_vectorstore.py` | Embed documents at index time | `EMBED_MODEL` | `gemini-embedding-001` |
+| `test_chroma.py` | Embed test queries | `EMBED_MODEL` | `gemini-embedding-001` |
+| `rag_pipeline.py` | Embed queries at retrieval time | `EMBED_MODEL` | `gemini-embedding-001` |
+| `rag_pipeline.py` | Generate answers | `GENERATION_MODEL` | `gemini-2.0-flash` |
+
+The embedding model and generation model are independent -- you can embed with Gemini and generate with Claude or OpenAI. The only hard constraint is that `EMBED_MODEL` must be the same in `build_vectorstore.py` and `rag_pipeline.py`. Changing it requires rebuilding the Chroma collection.
+
+### Swapping the generation model
+
+Find the `# LLM SWAP` comment in `RAGPipeline.answer()` in `rag_pipeline.py` and replace the `generate_content` block.
+
+**Claude** (`pip install anthropic`, add `ANTHROPIC_API_KEY` to `.env`):
+```python
+import anthropic
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+msg = client.messages.create(
+    model="claude-opus-4-8",
+    max_tokens=2048,
+    system=SYSTEM_PROMPT,
+    messages=[{"role": "user", "content": prompt}],
+)
+response_text = msg.content[0].text
+```
+
+**OpenAI** (`pip install openai`, add `OPENAI_API_KEY` to `.env`):
+```python
+from openai import OpenAI
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+resp = client.chat.completions.create(
+    model="gpt-4o",
+    temperature=0.1,
+    messages=[
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ],
+)
+response_text = resp.choices[0].message.content
+```
+
+Also update the `__init__` client initialization (marked `# LLM SWAP`) to instantiate your chosen provider's client instead of `genai.Client`.
+
+---
+
 ## Setup
 
 ```bash
