@@ -98,3 +98,15 @@ class RAGPipeline:
         if len(conditions) == 1:
             return conditions[0]
         return {"$and": conditions}
+    def _build_prompt(self, query: str, chunks: list) -> str:
+        source_blocks = []
+        for i, chunk in enumerate(chunks, 1):
+            title = chunk.get("title") or "Untitled"
+            author = chunk.get("author") or "Unknown"
+            date = chunk.get("memo_date") or ""
+            doc_type = chunk.get("doc_type") or ""
+            header = f"[{i}] {title} | {author} | {date} | {doc_type}"
+            source_blocks.append(f"{header}\n{chunk['text']}")
+
+        sources_text = "\n\n---\n\n".join(source_blocks)
+        return f"SOURCES:\n\n{sources_text}\n\n---\n\nQUESTION: {query}"

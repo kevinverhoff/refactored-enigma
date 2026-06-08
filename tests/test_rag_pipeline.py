@@ -79,3 +79,35 @@ def test_build_where_raw_overrides_convenience(pipeline):
     raw = {"cluster_id": {"$eq": 16}}
     result = pipeline._build_where(year=2024, doc_type="MEMO", where=raw)
     assert result == raw
+
+def test_build_prompt_numbers_sources(pipeline):
+    chunks = [
+        {"title": "Memo A", "author": "Wood", "memo_date": "2024-01-01",
+         "doc_type": "MEMO", "text": "Content of A"},
+        {"title": "Memo B", "author": "Shackle", "memo_date": "2024-06-01",
+         "doc_type": "MEMO", "text": "Content of B"},
+    ]
+    prompt = pipeline._build_prompt("What is homestead?", chunks)
+    assert "[1] Memo A | Wood | 2024-01-01 | MEMO" in prompt
+    assert "[2] Memo B | Shackle | 2024-06-01 | MEMO" in prompt
+    assert "Content of A" in prompt
+    assert "Content of B" in prompt
+    assert "QUESTION: What is homestead?" in prompt
+
+
+def test_build_prompt_missing_fields_fallback(pipeline):
+    chunks = [{"title": "", "author": "", "memo_date": "", "doc_type": "", "text": "Body"}]
+    prompt = pipeline._build_prompt("test?", chunks)
+    assert "[1] Untitled | Unknown" in prompt
+    assert "Body" in prompt
+
+
+def test_build_prompt_sources_separated(pipeline):
+    chunks = [
+        {"title": "A", "author": "X", "memo_date": "2024-01-01",
+         "doc_type": "MEMO", "text": "Text A"},
+        {"title": "B", "author": "Y", "memo_date": "2024-02-01",
+         "doc_type": "MEMO", "text": "Text B"},
+    ]
+    prompt = pipeline._build_prompt("q?", chunks)
+    assert "---" in prompt
