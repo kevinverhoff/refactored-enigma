@@ -111,3 +111,41 @@ def test_build_prompt_sources_separated(pipeline):
     ]
     prompt = pipeline._build_prompt("q?", chunks)
     assert "---" in prompt
+
+def test_embed_query_calls_gemini(pipeline):
+    mock_embedding = MagicMock()
+    mock_embedding.values = [0.1, 0.2, 0.3]
+    pipeline.gemini.models.embed_content = MagicMock(
+        return_value=MagicMock(embeddings=[mock_embedding])
+    )
+    result = pipeline._embed_query("homestead deduction")
+    assert result == [0.1, 0.2, 0.3]
+    pipeline.gemini.models.embed_content.assert_called_once()
+
+
+def test_retrieve_returns_enriched_chunks(pipeline):
+    pipeline._embed_query = MagicMock(return_value=[0.1, 0.2, 0.3])
+    pipeline.collection.query = MagicMock(return_value={
+        "documents": [["chunk text"]],
+        "metadatas": [[{
+            "title": "Test Memo", "author": "Wood", "memo_date": "2024-01-01",
+            "doc_type": "MEMO", "source_year": 2024,
+            "source": "https://example.com/test.pdf",
+        }]],
+        "distances": [[0.25]],
+    })
+    chunks = pipeline.retrieve("homestead deduction")
+    assert len(chunks) == 1
+    assert chunks[0]["title"] == "Test Memo"
+    assert chunks[0]["score"] == 0.75
+    assert chunks[0]["text"] == "chunk text"
+
+
+def test_retrieve_passes_where_filter(pipeline):
+    pipeline._embed_query = MagicMock(return_value=[0.1])
+    pipeline.collection.query = MagicMock(return_value={
+        "documents": [[]], "metadatas": [[]], "distances": [[]]
+    })
+    pipeline.retrieve("query", year=2024)
+    call_kwargs = pipeline.collection.query.call_args.kwargs
+    assert call_kwargs["where"] == {"source_year": {"$gte": 2024}}

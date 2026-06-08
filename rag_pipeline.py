@@ -110,3 +110,52 @@ class RAGPipeline:
 
         sources_text = "\n\n---\n\n".join(source_blocks)
         return f"SOURCES:\n\n{sources_text}\n\n---\n\nQUESTION: {query}"
+    def _embed_query(self, text: str) -> list:
+        # LLM SWAP: replace with your provider's embedding call.
+        # Use a query-optimized embedding type if your provider supports it.
+        result = self.gemini.models.embed_content(
+            model=EMBED_MODEL,
+            contents=[text],
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY"),
+        )
+        return result.embeddings[0].values
+
+    def retrieve(
+        self,
+        query: str,
+        n: int = None,
+        year: int = None,
+        doc_type: str = None,
+        author: str = None,
+        where: dict = None,
+    ) -> list:
+        n = n or self.n_results
+        where_clause = self._build_where(
+            year=year, doc_type=doc_type, author=author, where=where
+        )
+
+        kwargs = dict(
+            query_embeddings=[self._embed_query(query)],
+            n_results=n,
+            include=["documents", "metadatas", "distances"],
+        )
+        if where_clause:
+            kwargs["where"] = where_clause
+
+        r = self.collection.query(**kwargs)
+
+        chunks = []
+        for doc, meta, dist in zip(
+            r["documents"][0], r["metadatas"][0], r["distances"][0]
+        ):
+            chunks.append({
+                "text": doc,
+                "score": round(1 - dist, 3),
+                "title": meta.get("title", ""),
+                "author": meta.get("author", ""),
+                "memo_date": meta.get("memo_date", ""),
+                "doc_type": meta.get("doc_type", ""),
+                "source_year": meta.get("source_year", ""),
+                "source": meta.get("source", ""),
+            })
+        return chunks
