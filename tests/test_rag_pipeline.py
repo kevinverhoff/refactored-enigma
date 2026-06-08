@@ -149,3 +149,37 @@ def test_retrieve_passes_where_filter(pipeline):
     pipeline.retrieve("query", year=2024)
     call_kwargs = pipeline.collection.query.call_args.kwargs
     assert call_kwargs["where"] == {"source_year": {"$gte": 2024}}
+
+def test_answer_no_chunks_returns_no_results_response(pipeline):
+    pipeline.retrieve = MagicMock(return_value=[])
+    result = pipeline.answer("unknown query")
+    assert isinstance(result, RAGResponse)
+    assert "No relevant documents" in result.answer
+    assert result.sources == []
+    assert result.n_retrieved == 0
+
+
+def test_answer_calls_gemini_and_returns_response(pipeline):
+    mock_chunks = [{
+        "title": "Test Memo", "author": "Wood", "memo_date": "2024-01-01",
+        "doc_type": "MEMO", "text": "Some content", "score": 0.8,
+        "source_year": 2024, "source": "https://example.com/test.pdf",
+    }]
+    pipeline.retrieve = MagicMock(return_value=mock_chunks)
+    pipeline.gemini.models.generate_content = MagicMock(
+        return_value=MagicMock(text="The answer is [1].")
+    )
+    result = pipeline.answer("What does this say?")
+    assert result.answer == "The answer is [1]."
+    assert result.n_retrieved == 1
+    assert result.model == GENERATION_MODEL
+    assert result.sources == mock_chunks
+    assert result.query == "What does this say?"
+
+
+def test_answer_passes_filters_to_retrieve(pipeline):
+    pipeline.retrieve = MagicMock(return_value=[])
+    pipeline.answer("query", year=2025, doc_type="MEMO")
+    pipeline.retrieve.assert_called_once_with(
+        "query", n=None, year=2025, doc_type="MEMO", author=None, where=None
+    )

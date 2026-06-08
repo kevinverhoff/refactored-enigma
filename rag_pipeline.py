@@ -159,3 +159,59 @@ class RAGPipeline:
                 "source": meta.get("source", ""),
             })
         return chunks
+    def answer(
+        self,
+        query: str,
+        n: int = None,
+        year: int = None,
+        doc_type: str = None,
+        author: str = None,
+        where: dict = None,
+    ) -> RAGResponse:
+        chunks = self.retrieve(
+            query, n=n, year=year, doc_type=doc_type, author=author, where=where
+        )
+
+        if not chunks:
+            return RAGResponse(
+                answer="No relevant documents found for this query.",
+                query=query,
+                model=GENERATION_MODEL,
+            )
+
+        prompt = self._build_prompt(query, chunks)
+
+        # LLM SWAP: replace this block with your provider's generation call.
+        # Inputs: SYSTEM_PROMPT (str) and prompt (str, contains sources + question).
+        # Output: generated answer as a plain string.
+        #
+        # Claude example:
+        #   import anthropic
+        #   client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        #   msg = client.messages.create(model="claude-opus-4-8", max_tokens=2048,
+        #       system=SYSTEM_PROMPT, messages=[{"role": "user", "content": prompt}])
+        #   response_text = msg.content[0].text
+        #
+        # OpenAI example:
+        #   from openai import OpenAI
+        #   client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        #   resp = client.chat.completions.create(model="gpt-4o", temperature=0.1,
+        #       messages=[{"role": "system", "content": SYSTEM_PROMPT},
+        #                 {"role": "user", "content": prompt}])
+        #   response_text = resp.choices[0].message.content
+        response = self.gemini.models.generate_content(
+            model=GENERATION_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                temperature=0.1,
+            ),
+        )
+
+        return RAGResponse(
+            answer=response.text,
+            sources=chunks,
+            query=query,
+            model=GENERATION_MODEL,
+            n_retrieved=len(chunks),
+        )
