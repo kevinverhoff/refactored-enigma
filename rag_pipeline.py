@@ -29,7 +29,7 @@ load_dotenv()
 EMBED_MODEL = "gemini-embedding-001"
 
 # SWAP: generation model for producing answers
-GENERATION_MODEL = "gemini-2.0-flash"
+GENERATION_MODEL = "gemini-2.5-flash"
 
 CHROMA_DIR = "chroma_db"
 COLLECTION_NAME = "dlgf_memos"

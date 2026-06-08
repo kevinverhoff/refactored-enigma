@@ -189,7 +189,7 @@ This project uses two Gemini models. Every call site is marked with a `# LLM SWA
 | `build_vectorstore.py` | Embed documents at index time | `EMBED_MODEL` | `gemini-embedding-001` |
 | `test_chroma.py` | Embed test queries | `EMBED_MODEL` | `gemini-embedding-001` |
 | `rag_pipeline.py` | Embed queries at retrieval time | `EMBED_MODEL` | `gemini-embedding-001` |
-| `rag_pipeline.py` | Generate answers | `GENERATION_MODEL` | `gemini-2.0-flash` |
+| `rag_pipeline.py` | Generate answers | `GENERATION_MODEL` | `gemini-2.5-flash` |
 
 The embedding model and generation model are independent -- you can embed with Gemini and generate with Claude or OpenAI. The only hard constraint is that `EMBED_MODEL` must be the same in `build_vectorstore.py` and `rag_pipeline.py`. Changing it requires rebuilding the Chroma collection.
 
