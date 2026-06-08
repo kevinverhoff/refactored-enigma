@@ -215,3 +215,49 @@ class RAGPipeline:
             model=GENERATION_MODEL,
             n_retrieved=len(chunks),
         )
+
+def main():
+    parser = argparse.ArgumentParser(description="Query DLGF memos via RAG")
+    parser.add_argument("--n", type=int, default=DEFAULT_N,
+                        help="Number of chunks to retrieve per query")
+    parser.add_argument("--year", type=int, default=None,
+                        help="Filter: source_year >= YEAR")
+    parser.add_argument("--doc-type", default=None,
+                        help="Filter: doc_type equals value (e.g. MEMO, TEMPLATE)")
+    parser.add_argument("--author", default=None,
+                        help="Filter: author equals value")
+    args = parser.parse_args()
+
+    pipeline = RAGPipeline(n_results=args.n)
+    print(f"Model: {GENERATION_MODEL} | chunks per query: {args.n}")
+    if args.year:
+        print(f"  Filter: source_year >= {args.year}")
+    if args.doc_type:
+        print(f"  Filter: doc_type = {args.doc_type}")
+    if args.author:
+        print(f"  Filter: author = {args.author}")
+    print("Type a question (or 'quit' to exit)\n")
+
+    while True:
+        try:
+            query = input("Q: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            break
+
+        if not query or query.lower() in ("quit", "exit", "q"):
+            break
+
+        result = pipeline.answer(
+            query,
+            year=args.year,
+            doc_type=args.doc_type,
+            author=args.author,
+        )
+
+        print(f"\n{result.answer}")
+        print(f"\n[{result.n_retrieved} chunks retrieved | {result.model}]\n")
+
+
+if __name__ == "__main__":
+    main()
