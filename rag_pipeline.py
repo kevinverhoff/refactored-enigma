@@ -54,3 +54,47 @@ class RAGResponse:
     query: str = ""
     model: str = ""
     n_retrieved: int = 0
+
+class RAGPipeline:
+    def __init__(self, n_results: int = DEFAULT_N):
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise SystemExit(
+                "ERROR: GEMINI_API_KEY not set. Add it to your .env file."
+            )
+        # LLM SWAP: replace genai.Client with your provider's client.
+        self.gemini = genai.Client(api_key=api_key)
+        self.n_results = n_results
+
+        chroma = chromadb.PersistentClient(path=CHROMA_DIR)
+        try:
+            self.collection = chroma.get_collection(COLLECTION_NAME)
+        except Exception:
+            raise SystemExit(
+                f"ERROR: Chroma collection '{COLLECTION_NAME}' not found. "
+                "Run build_vectorstore.py first."
+            )
+
+    def _build_where(
+        self,
+        year: int = None,
+        doc_type: str = None,
+        author: str = None,
+        where: dict = None,
+    ) -> dict:
+        if where:
+            return where
+
+        conditions = []
+        if year:
+            conditions.append({"source_year": {"$gte": int(year)}})
+        if doc_type:
+            conditions.append({"doc_type": {"$eq": doc_type}})
+        if author:
+            conditions.append({"author": {"$eq": author}})
+
+        if not conditions:
+            return None
+        if len(conditions) == 1:
+            return conditions[0]
+        return {"$and": conditions}
