@@ -21,7 +21,7 @@ The full stack is live: a LangGraph-powered research assistant with a Streamlit 
 |------|--------|--------|
 | 1. Collect & download | `get_docs.py` | `docs/<year>/` + `metadata.json` |
 | 2. Extract text | `ingest.py` | `documents.parquet` |
-| 3. Explore | `explore.py` | `eda/` (charts + flagged docs) |
+| 3. Explore | `explore.py` | `data/eda/` (charts + flagged docs) |
 | 4. Topic modeling | `document_clustering.py` | cluster columns in parquet + `cluster_summary.csv` |
 | 5. Build vector store | `build_vectorstore.py` | `chroma_db/` (Chroma collection) |
 | 6. RAG pipeline | `rag_pipeline.py` | importable module + interactive CLI |
@@ -39,7 +39,7 @@ Reads `metadata.json` and extracts text from each downloaded file:
 Outputs `documents.parquet` with columns: `doc_id`, `source`, `doc_type`, `text`, `char_count`, `retrieved_at`.
 
 ### `explore.py`
-Exploratory analysis of the parquet. Produces four outputs in `eda/`, each saved as interactive HTML and static PNG. TF-IDF uses a custom token pattern to exclude pure numbers and underscore artifacts from scanned form templates.
+Exploratory analysis of the parquet. Produces four outputs in `data/eda/`, each saved as interactive HTML and static PNG. TF-IDF uses a custom token pattern to exclude pure numbers and underscore artifacts from scanned form templates.
 
 ### `document_clustering.py`
 Clusters documents by topic using TF-IDF + SVD embeddings and HDBSCAN. No need to specify the number of clusters -- HDBSCAN finds natural density-based groupings, leaving genuinely ambiguous documents unassigned rather than forcing them into a cluster. Reduces to 2D with UMAP for visualization. Adds `cluster_id` and `cluster_label` to both `documents.parquet` and `metadata.json`, and writes `cluster_summary.csv` with per-cluster doc counts, type breakdowns, top terms, and date ranges.
@@ -61,13 +61,13 @@ The LangGraph agent layer. See the **LangGraph Agent & UI** section below.
 
 The corpus is overwhelmingly memos (428 of 475). The remaining documents are templates, Excel attachments, and supplemental resources. The `PDF`/`DOCX`/`XLSX` fallback types are files whose names do not follow the standard DLGF naming convention.
 
-![Document type distribution](eda/doc_type_distribution.png)
+![Document type distribution](data/eda/doc_type_distribution.png)
 
 ### Text length by type
 
 Log-scale box plots reveal a heavily right-skewed distribution. The median document is ~4,500 characters; the mean is ~21,000 characters, pulled up by large Excel worksheets (one XLSX tops 2.6 million characters). No documents fell below the 500-character usefulness threshold -- extraction quality is clean across all file types.
 
-![Text length by type](eda/text_length_by_type.png)
+![Text length by type](data/eda/text_length_by_type.png)
 
 ### TF-IDF top terms per document type
 
@@ -79,7 +79,7 @@ Cross-corpus TF-IDF (averaged per document type) surfaces vocabulary that is dis
 
 That separation across types means a simple classifier will likely work well, and retrieval-augmented generation will be able to distinguish document intent before answering a query.
 
-![TF-IDF top terms](eda/tfidf_top_terms.png)
+![TF-IDF top terms](data/eda/tfidf_top_terms.png)
 
 ### Topic clusters
 
@@ -101,7 +101,7 @@ One notable signal: C13 pulls together both MEMO and TEMPLATE documents on the s
 
 41.7% of documents are currently unassigned. This is HDBSCAN being conservative -- it leaves ambiguous documents out rather than forcing them into weak clusters. Cluster parameters are being tuned.
 
-![Cluster scatter (UMAP)](eda/clusters_scatter.png)
+![Cluster scatter (UMAP)](data/eda/clusters_scatter.png)
 
 ---
 
@@ -424,35 +424,37 @@ The Gemini free tier is sufficient for corpora up to a few thousand documents. E
 
 ```
 .
-|-- get_docs.py                # Step 1: document collection and download
-|-- ingest.py                  # Step 2: text extraction -> parquet
-|-- explore.py                 # Step 3: EDA charts and flagging
-|-- document_clustering.py     # Step 4: topic modeling and cluster visualization
-|-- build_vectorstore.py       # Step 5: chunk, embed, and load into Chroma
-|-- rag_pipeline.py            # Step 6: RAG pipeline (retrieve -> generate -> RAGResponse)
-|-- tools.py                   # Step 7: LangGraph @tool functions wrapping RAGPipeline
-|-- agent.py                   # Step 7: LangGraph ReAct agent graph
-|-- app.py                     # Step 7: Streamlit chat UI
-|-- run_pipeline.py            # Run steps 1-6 end-to-end (or --from N)
-|-- test_chroma.py             # Low-level Chroma queries (no LLM)
-|-- test_rag.py                # RAG demo -- queries, filters, grounding
-|-- tests/
-|   |-- test_rag_pipeline.py   # Unit tests for RAGPipeline (19 tests)
-|   `-- test_tools.py          # Unit tests for LangGraph tools (18 tests)
-|-- requirements.txt
-|-- .python-version            # Python 3.12 recommended
-|-- metadata.json              # Per-file metadata manifest (includes cluster assignments)
-|-- documents.parquet          # Extracted text corpus (includes cluster assignments)
-|-- cluster_summary.csv        # Per-cluster stats and top terms
+|-- pipeline/                       # Data collection and processing scripts
+|   |-- get_docs.py                 # Step 1: document collection and download
+|   |-- ingest.py                   # Step 2: text extraction -> parquet
+|   |-- explore.py                  # Step 3: EDA charts and flagging
+|   |-- document_clustering.py      # Step 4: topic modeling and cluster visualization
+|   `-- build_vectorstore.py        # Step 5: chunk, embed, and load into Chroma
+|-- scripts/                        # Exploratory and development scripts
+|   |-- test_chroma.py              # Low-level Chroma queries (no LLM)
+|   `-- test_rag.py                 # RAG demo -- queries, filters, grounding
+|-- tests/                          # Formal unit test suite
+|   |-- test_rag_pipeline.py        # Unit tests for RAGPipeline (19 tests)
+|   `-- test_tools.py               # Unit tests for LangGraph tools (18 tests)
+|-- data/                           # Build artifacts (most gitignored)
+|   |-- cluster_summary.csv         # Per-cluster stats and top terms
+|   `-- eda/                        # EDA output charts and CSV
+|       |-- doc_type_distribution.{html,png}
+|       |-- text_length_by_type.{html,png}
+|       |-- tfidf_top_terms.{html,png}
+|       |-- clusters_scatter.{html,png}
+|       |-- clusters_by_doctype.{html,png}
+|       `-- short_docs_flagged.csv
 |-- docs/
-|   |-- 2022/ ... 2026/        # Downloaded source documents
-|   `-- superpowers/           # Design specs and implementation plans
-|-- chroma_db/                 # Persistent Chroma vector store (13,589 chunks)
-`-- eda/
-    |-- doc_type_distribution.{html,png}
-    |-- text_length_by_type.{html,png}
-    |-- tfidf_top_terms.{html,png}
-    |-- clusters_scatter.{html,png}
-    |-- clusters_by_doctype.{html,png}
-    `-- short_docs_flagged.csv
+|   `-- superpowers/                # Design specs and implementation plans
+|-- rag_pipeline.py                 # Step 6: RAG pipeline (retrieve -> generate -> RAGResponse)
+|-- tools.py                        # Step 7: LangGraph @tool functions wrapping RAGPipeline
+|-- agent.py                        # Step 7: LangGraph ReAct agent graph
+|-- app.py                          # Step 7: Streamlit chat UI
+|-- run_pipeline.py                 # Run steps 1-5 end-to-end (or --from N)
+|-- requirements.txt
+|-- .python-version                 # Python 3.12 recommended
+|-- metadata.json                   # Generated: per-file metadata manifest (gitignored)
+|-- documents.parquet               # Generated: extracted text corpus (gitignored)
+`-- chroma_db/                      # Generated: Chroma vector store (gitignored)
 ```

@@ -10,7 +10,7 @@ from rag_pipeline import RAGPipeline, GENERATION_MODEL
 
 _pipeline: RAGPipeline | None = None
 
-_CLUSTER_CSV: Path = Path(__file__).parent / "cluster_summary.csv"
+_CLUSTER_CSV: Path = Path(__file__).parent / "data" / "cluster_summary.csv"
 
 _SUMMARIZE_SYSTEM = (
     "You are an expert on Indiana DLGF (Department of Local Government Finance) "

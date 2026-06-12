@@ -24,6 +24,41 @@ st.set_page_config(page_title="DLGF Memo Assistant", layout="wide")
 st.title("DLGF Memo Assistant")
 st.caption("Ask questions about Indiana DLGF memos and guidance documents (2022-2026)")
 
+with st.expander("About this tool", expanded=False):
+    st.markdown("""
+**What is this?**
+A research assistant for Indiana Department of Local Government Finance (DLGF) guidance documents.
+Ask questions in plain English and the agent searches, summarizes, compares, and quotes from
+source memos -- with inline citations and links back to the original PDFs.
+
+**The dataset**
+475 documents collected from the [DLGF memos page](https://www.in.gov/dlgf/memos-and-presentations/memos/),
+covering 2022 through 2026. Documents include:
+- **Memos (428):** official guidance on property assessment, tax caps, levy appeals, homestead
+  deductions, TIF districts, reassessment cycles, circuit breaker credits, and more
+- **Templates & forms:** petition and appeal forms, submission worksheets
+- **Attachments:** Excel levy calculation worksheets, supplemental economic data
+
+The corpus spans 10.2 million characters across 13,589 indexed chunks in a local vector store.
+
+**What the agent can do**
+
+| Ask... | The agent will... |
+|---|---|
+| A direct question | Answer with cited sources |
+| "Summarize what DLGF says about X" | Synthesize across relevant memos |
+| "Find documents about X" | Return titles, dates, authors, and URLs |
+| "What changed between 2022 and 2025 on X?" | Compare early vs. recent guidance |
+| "What topics are covered?" | List all 18 topic clusters with doc counts |
+| "Tell me more about cluster N" | Browse documents in that cluster |
+| "Key quotes about X" | Extract notable verbatim passages |
+
+**Tips**
+- Use the sidebar filters to scope by year, document type, or author.
+- Or mention them naturally: *"what did DLGF say about homestead deductions in 2025?"*
+- Follow-up questions work -- the agent remembers the conversation.
+""")
+
 with st.sidebar:
     st.header("Optional Filters")
     st.markdown("Set defaults here, or mention filters naturally in your question.")

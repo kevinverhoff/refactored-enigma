@@ -222,4 +222,4 @@ chroma_db/
 docs/20*/
 metadata.json
 documents.parquet
-eda/*.html
+data/eda/*.html

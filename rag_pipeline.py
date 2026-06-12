@@ -128,15 +128,19 @@ class RAGPipeline:
         doc_type: str = None,
         author: str = None,
         where: dict = None,
+        max_per_source: int = 1,
     ) -> list:
         n = n or self.n_results
         where_clause = self._build_where(
             year=year, doc_type=doc_type, author=author, where=where
         )
 
+        # Over-fetch so deduplication still yields n results when one document
+        # dominates the top scores (e.g. a large XLSX split into many chunks).
+        fetch_n = n * max(3, max_per_source + 2)
         kwargs = dict(
             query_embeddings=[self._embed_query(query)],
-            n_results=n,
+            n_results=fetch_n,
             include=["documents", "metadatas", "distances"],
         )
         if where_clause:
@@ -144,10 +148,15 @@ class RAGPipeline:
 
         r = self.collection.query(**kwargs)
 
+        seen: dict[str, int] = {}
         chunks = []
         for doc, meta, dist in zip(
             r["documents"][0], r["metadatas"][0], r["distances"][0]
         ):
+            source = meta.get("source", "")
+            if seen.get(source, 0) >= max_per_source:
+                continue
+            seen[source] = seen.get(source, 0) + 1
             chunks.append({
                 "text": doc,
                 "score": round(1 - dist, 3),
@@ -156,8 +165,10 @@ class RAGPipeline:
                 "memo_date": meta.get("memo_date", ""),
                 "doc_type": meta.get("doc_type", ""),
                 "source_year": meta.get("source_year", ""),
-                "source": meta.get("source", ""),
+                "source": source,
             })
+            if len(chunks) >= n:
+                break
         return chunks
     def answer(
         self,

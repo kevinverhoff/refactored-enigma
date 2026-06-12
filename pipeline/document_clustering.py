@@ -36,8 +36,8 @@ except ImportError:
 
 PARQUET_FILE = Path("documents.parquet")
 METADATA_FILE = Path("metadata.json")
-CLUSTER_SUMMARY_FILE = Path("cluster_summary.csv")
-EDA_DIR = Path("eda")
+CLUSTER_SUMMARY_FILE = Path("data/cluster_summary.csv")
+EDA_DIR = Path("data/eda")
 
 SVD_COMPONENTS = 100
 HDBSCAN_MIN_CLUSTER_SIZE = 8

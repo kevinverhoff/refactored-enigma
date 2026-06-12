@@ -21,7 +21,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 warnings.filterwarnings("ignore")
 
 PARQUET_FILE = Path("documents.parquet")
-EDA_DIR = Path("eda")
+EDA_DIR = Path("data/eda")
 SHORT_CHAR_THRESHOLD = 500
 
 # Plotly color palette (one per doc_type, cycling if needed)

@@ -2,10 +2,10 @@
 Run the full DLGF memo pipeline in sequence.
 
 Steps:
-  1  get_docs.py           Download documents and write metadata.json
-  2  ingest.py             Extract text -> documents.parquet
-  3  document_clustering.py  Topic modeling -> cluster columns in parquet
-  4  build_vectorstore.py  Embed and index -> chroma_db/
+  1  pipeline/get_docs.py           Download documents and write metadata.json
+  2  pipeline/ingest.py             Extract text -> documents.parquet
+  3  pipeline/document_clustering.py  Topic modeling -> cluster columns in parquet
+  4  pipeline/build_vectorstore.py  Embed and index -> chroma_db/
 
 Usage:
     python run_pipeline.py              # run all steps
@@ -21,10 +21,10 @@ import time
 from pathlib import Path
 
 STEPS = [
-    (1, "get_docs.py",              "Download documents + write metadata.json"),
-    (2, "ingest.py",                "Extract text -> documents.parquet"),
-    (3, "document_clustering.py",   "Topic modeling -> cluster columns in parquet"),
-    (4, "build_vectorstore.py",     "Embed + index -> chroma_db/"),
+    (1, "pipeline/get_docs.py",              "Download documents + write metadata.json"),
+    (2, "pipeline/ingest.py",                "Extract text -> documents.parquet"),
+    (3, "pipeline/document_clustering.py",   "Topic modeling -> cluster columns in parquet"),
+    (4, "pipeline/build_vectorstore.py",     "Embed + index -> chroma_db/"),
 ]
 
 
